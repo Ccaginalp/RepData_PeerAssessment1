@@ -1,0 +1,132 @@
+---
+title: "Reproducible Research Course Project 1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r load data}
+library(tidyverse)
+library(glue)
+library(magrittr)
+setwd("//chws3092/PPM Admin File/Pricing Product General/Users/Carey C/Coursera/Reproducible Research")
+activity <- read.csv("data/activity.csv", stringsAsFactors = FALSE)
+```
+
+## Including Plots
+
+Let's examine the distribution of step values by plotting a histogram:
+
+```{r steps per day}
+steps_per_day <- activity %>% 
+  filter(!is.na(steps)) %>% 
+  group_by(date) %>% 
+  summarise(steps = sum(steps))
+
+ggplot(steps_per_day) +
+  geom_histogram(aes(steps), binwidth = 1000) +
+  labs(x = "Daily Steps", y = "Number of days")
+```
+
+Now the mean and median steps per day:
+
+```{r mean median steps}
+mean <- mean(steps_per_day$steps) %>% round()
+median <- median(steps_per_day$steps)
+print(str_glue("Mean steps per day: {mean}"))
+print(str_glue("Median steps per day: {median}"))
+```
+
+Let's look at a time series plot of the steps per 5 minute interval next:
+
+```{r}
+steps_per_interval <- activity %>% 
+  filter(!is.na(steps)) %>% 
+  group_by(interval) %>% 
+  summarise(steps = mean(steps))
+plot(steps_per_interval$interval, 
+     steps_per_interval$steps, 
+     type = "l",
+     xlab = "Interval",
+     ylab = "Steps per Interval")
+
+max_val <- which.max(steps_per_interval$steps)
+print(str_glue("Interval with maximum steps is {steps_per_interval[max_val, 'interval']}, which contains {steps_per_interval[max_val, 'steps'] %>% round()} steps."))
+```
+
+Next, let's calculate the number of missing values in the dataset.
+
+```{r}
+no_missing <- activity %>% filter(is.na(steps)) %>% count()
+print(str_glue("There are {no_missing} missing values in the dataset."))
+```
+
+We are going to fill in these missing values with the mean value for that interval in all the days. We do so as follows:
+
+```{r}
+new_activity <- activity %>% 
+  left_join(steps_per_interval, by = "interval") %>% 
+  mutate(steps = coalesce(steps.x, as.integer(round(steps.y)))) %>% 
+  select(-steps.x, -steps.y)
+```
+
+Now we make a histogram and compute the mean and median of the values of steps per day.
+
+```{r}
+new_steps_per_day <- new_activity %>% 
+  group_by(date) %>% 
+  summarise(steps = sum(steps))
+
+ggplot(new_steps_per_day) +
+  geom_histogram(aes(steps), binwidth = 1000) +
+  labs(x = "Daily Steps", y = "Number of days")
+```
+
+```{r}
+mean <- mean(new_steps_per_day$steps) %>% round()
+median <- median(new_steps_per_day$steps)
+print(str_glue("Mean steps per day: {mean}"))
+print(str_glue("Median steps per day: {median}"))
+```
+
+The mean steps per day still remain roughly the same, but the histogram has shifted significantly to the right. This makes sense, because we have replaced NA values for some time periods during some of the days with positive values, but if these values are concentrated on particular days, they may not have affected the average much at all.
+
+Finally, let's examine the differences in activity patterns between weekdays and weekends.
+
+```{r}
+activity_with_factors <- new_activity %>% 
+  mutate(weekday = weekdays(as.Date(date))) %>% 
+  mutate(weekday = ifelse(weekday %in% c("Monday", "Tuesday", "Wednesday", "Thrusday", "Friday"),
+                          "weekday",
+                          "weekend")) %>% 
+  mutate(weekday = as.factor(weekday))
+```
+
+And here's a panel plot produced to show the activity patterns on a weekday vs a weekend.
+
+```{r}
+plot_data <- activity_with_factors %>%
+  group_by(interval, weekday) %>% 
+  summarise(steps = mean(steps))
+plot_data_weekday <- plot_data %>% filter(weekday == "weekday")
+plot_data_weekend <- plot_data %>% filter(weekday == "weekend")
+
+par(mfrow = c(2, 1))
+plot(plot_data_weekday$interval, 
+     plot_data_weekday$steps, 
+     type = "l",
+     xlab = "Interval",
+     ylab = "Steps per Interval",
+     main = "Weekday")
+
+plot(plot_data_weekend$interval, 
+     plot_data_weekend$steps, 
+     type = "l",
+     xlab = "Interval",
+     ylab = "Steps per Interval",
+     main = "Weekend")
+```
+
